@@ -4,15 +4,21 @@ A [Backstage](https://backstage.io) internal developer portal with a custom **Pl
 
 ---
 
-## Repository layout
+## Project structure
 
 ```
-.
+resmed-platform-dashboard/
+│
+│  ← The developer portal (what you see in the browser at localhost:3000)
 ├── packages/
-│   ├── app/                        # Backstage frontend (React)
-│   └── backend/                    # Backstage backend (Node)
+│   ├── app/                        # React frontend — the Backstage UI
+│   └── backend/                    # Node.js backend — serves UI + APIs
+│
+│  ← Your custom plugin (lives inside the portal)
 ├── plugins/
-│   └── platform-dashboard/         # Custom Service Health & K8s Dashboard plugin
+│   └── platform-dashboard/         # Shows service health + K8s pod status
+│
+│  ← The 6 Go microservices (the actual product backend)
 ├── services/
 │   ├── device-catalog-api/         # ResMed device catalogue (CRUD + stock)
 │   ├── order-service/              # Customer order management
@@ -20,18 +26,97 @@ A [Backstage](https://backstage.io) internal developer portal with a custom **Pl
 │   ├── patient-service/            # Patient records & device assignments
 │   ├── therapy-data-api/           # CPAP therapy sessions & compliance
 │   └── notification-service/       # Async notification dispatch
+│
+│  ← Kubernetes config (how services run in production)
 ├── k8s/
-│   ├── namespaces.yaml             # production + staging namespaces
-│   ├── postgres/                   # Single PostgreSQL deployment (6 databases)
+│   ├── namespaces.yaml             # Creates "production" namespace
+│   ├── postgres/                   # One shared PostgreSQL pod, 6 databases inside
 │   ├── services/                   # Deployment + Service per microservice
 │   └── monitoring/                 # Prometheus ServiceMonitor CRD
-├── .github/
-│   ├── workflows/
-│   │   ├── ci.yml                  # Quality gates (test, lint, build, scan, k8s validate)
-│   │   └── cd.yml                  # Build → push GHCR → update manifests → deploy
-│   └── dependabot.yml              # Weekly Go module + Actions updates
-└── .golangci.yml                   # Shared golangci-lint config
+│
+│  ← CI/CD (automated quality checks + deployment)
+└── .github/
+    ├── workflows/
+    │   ├── ci.yml                  # Runs on every push/PR — quality gates
+    │   └── cd.yml                  # Runs on merge to main — build & deploy
+    └── dependabot.yml              # Auto-updates dependencies weekly
 ```
+
+---
+
+## How the two backends are different
+
+There are **two completely separate backends** in this repo — a common point of confusion:
+
+| | Backstage backend (`packages/backend`) | Microservices (`services/`) |
+|---|---|---|
+| Language | Node.js | Go |
+| Purpose | Serves the Backstage portal, catalog, auth | Your actual product APIs |
+| Port | 7007 | 8080 (each) |
+| Database | SQLite (local) | PostgreSQL |
+| Who calls it | Your browser | Other services / clients |
+
+Backstage **observes** the microservices — it reads their health and metadata. It does not call them directly in production (except the platform-dashboard plugin for health checks).
+
+---
+
+## How everything connects
+
+```
+You write code
+      │
+      ▼
+Push to GitHub
+      │
+      ▼
+CI pipeline runs automatically (ci.yml)
+  ├─ tests pass? (≥70% coverage, runs against real Postgres)
+  ├─ lint clean? (golangci-lint)
+  ├─ Docker image builds?
+  ├─ no critical CVEs? (Trivy scan)
+  └─ K8s manifests valid? (kubeconform)
+      │ all pass
+      ▼
+CD pipeline runs automatically (cd.yml)
+  ├─ detects WHICH services actually changed (dorny/paths-filter)
+  ├─ builds + pushes only those Docker images → GHCR
+  ├─ updates image tags in k8s/services/*.yaml
+  └─ deploys to Kubernetes (self-hosted runner)
+      │
+      ▼
+Backstage (localhost:3000)
+  ├─ Catalog    → shows all 6 services registered via catalog-info.yaml
+  ├─ CI/CD tab  → shows GitHub Actions pipeline runs
+  └─ Platform Dashboard → live service health + pod status
+```
+
+---
+
+## Does the pipeline use Docker automatically?
+
+Yes — **Docker is used automatically by GitHub Actions**, you never run it yourself:
+
+1. **CI** — the `build` job uses `docker/build-push-action` to build each service's image from its `Dockerfile`. It does **not** push — just verifies the image builds without errors.
+
+2. **CD** — after CI passes, the `push-images` job builds the image again and **pushes it to GHCR** (GitHub Container Registry) tagged with the commit SHA:
+   ```
+   ghcr.io/taotao19950405/device-catalog-api:sha-9cc2944
+   ghcr.io/taotao19950405/device-catalog-api:latest
+   ```
+
+3. **Smart rebuilds** — only services whose code actually changed get rebuilt. If you only edit `order-service/main.go`, only the `order-service` image is rebuilt. The other 5 are skipped.
+
+Each service has a `Dockerfile` that uses a two-stage build:
+```dockerfile
+# Stage 1 — compile
+FROM golang:1.26-alpine AS builder
+RUN go build -o service .
+
+# Stage 2 — minimal runtime image
+FROM alpine:3.20
+COPY --from=builder /app/service .
+```
+The final image contains only the compiled binary + Alpine Linux — no Go toolchain, keeping images small and secure.
 
 ---
 
@@ -61,10 +146,9 @@ A [Backstage](https://backstage.io) internal developer portal with a custom **Pl
         │              ┌─────▼──────┐                 │
         │              │ PostgreSQL │ (6 databases)    │
         │              └────────────┘                 │
-        │                                             │
-        │  ┌──────────────────────────────────────┐  │
-        │  │  Prometheus ServiceMonitor → /metrics │  │
-        │  └──────────────────────────────────────┘  │
+        │  ┌──────────────────────────────────────┐   │
+        │  │  Prometheus ServiceMonitor → /metrics │   │
+        │  └──────────────────────────────────────┘   │
         └─────────────────────────────────────────────┘
 ```
 
@@ -81,12 +165,19 @@ A [Backstage](https://backstage.io) internal developer portal with a custom **Pl
 
 ### Run Backstage locally
 
-```bash
-yarn install
-yarn dev
+Create a `.env.local` file at the project root:
+```
+GITHUB_TOKEN=your_pat_token
+AUTH_GITHUB_CLIENT_ID=your_oauth_app_client_id
+AUTH_GITHUB_CLIENT_SECRET=your_oauth_app_client_secret
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — the Platform Dashboard is in the left sidebar.
+Then start:
+```bash
+set -a && source .env.local && set +a && yarn start
+```
+
+Open [http://localhost:3000](http://localhost:3000) — sign in with GitHub to see the CI/CD tab.
 
 ### Run a single microservice locally
 
@@ -115,7 +206,7 @@ kubectl apply -f k8s/monitoring/
 
 | Service | Database | Key endpoints |
 |---|---|---|
-| device-catalog-api | `device_catalog` | `GET /devices`, `GET /devices/:sku` |
+| device-catalog-api | `device_catalog` | `GET /devices`, `GET /devices/:sku`, `GET /devices/count` |
 | order-service | `orders` | `GET /orders`, `POST /orders`, `GET /orders/:id` |
 | inventory-api | `inventory` | `GET /inventory`, `GET /inventory/:sku` |
 | patient-service | `patients` | `GET /patients`, `GET /patients/:id` |
@@ -126,17 +217,17 @@ Every service exposes `GET /health` and `GET /metrics`. See [services/README.md]
 
 ---
 
-## CI/CD
+## CI/CD quality gates
 
 | Gate | Tool | Threshold |
 |---|---|---|
-| Unit tests + coverage | `go test` | 70% minimum |
+| Unit + integration tests | `go test` + real Postgres | ≥ 70% coverage |
 | Lint | golangci-lint v1.64 | zero errors |
 | Docker build | docker/build-push-action | must succeed |
 | Security scan | Trivy | no unfixed CRITICAL CVEs |
 | K8s manifest validation | kubeconform | strict schema |
 
-See [ARCHITECTURE.md](ARCHITECTURE.md#7-cicd-pipeline) for the full pipeline description.
+See [ARCHITECTURE.md](ARCHITECTURE.md#7-cicd-pipeline) for the full pipeline breakdown.
 
 ---
 

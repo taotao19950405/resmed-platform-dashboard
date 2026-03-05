@@ -3,7 +3,7 @@ module github.com/taotao19950405/resmed-platform-dashboard/services/inventory-ap
 go 1.26
 
 require (
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.11.2
 	github.com/prometheus/client_golang v1.20.0
 )
 

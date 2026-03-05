@@ -92,34 +92,6 @@ Backstage (localhost:3000)
 
 ---
 
-## Does the pipeline use Docker automatically?
-
-Yes — **Docker is used automatically by GitHub Actions**, you never run it yourself:
-
-1. **CI** — the `build` job uses `docker/build-push-action` to build each service's image from its `Dockerfile`. It does **not** push — just verifies the image builds without errors.
-
-2. **CD** — after CI passes, the `push-images` job builds the image again and **pushes it to GHCR** (GitHub Container Registry) tagged with the commit SHA:
-   ```
-   ghcr.io/taotao19950405/device-catalog-api:sha-9cc2944
-   ghcr.io/taotao19950405/device-catalog-api:latest
-   ```
-
-3. **Smart rebuilds** — only services whose code actually changed get rebuilt. If you only edit `order-service/main.go`, only the `order-service` image is rebuilt. The other 5 are skipped.
-
-Each service has a `Dockerfile` that uses a two-stage build:
-```dockerfile
-# Stage 1 — compile
-FROM golang:1.26-alpine AS builder
-RUN go build -o service .
-
-# Stage 2 — minimal runtime image
-FROM alpine:3.20
-COPY --from=builder /app/service .
-```
-The final image contains only the compiled binary + Alpine Linux — no Go toolchain, keeping images small and secure.
-
----
-
 ## Architecture overview
 
 ```

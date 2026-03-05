@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-svc
+  namespace: staging
+  labels:
+    app: notification-svc
+    team: comms-team
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notification-svc
+  template:
+    metadata:
+      labels:
+        app: notification-svc
+        team: comms-team
+    spec:
+      containers:
+        - name: notification-svc
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-svc
+  namespace: staging
+  labels:
+    app: notification-svc
+spec:
+  selector:
+    app: notification-svc
+  ports:
+    - port: 80
+      targetPort: 80

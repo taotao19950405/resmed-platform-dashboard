@@ -4,7 +4,27 @@
       "Bash(node:*)",
       "Bash(npm install:*)",
       "Bash(yarn:*)",
-      "Bash(npx:*)"
+      "Bash(npx:*)",
+      "Bash(lsof:*)",
+      "Bash(docker info:*)",
+      "Bash(brew install:*)",
+      "Bash(chmod +x:*)",
+      "Bash(open:*)",
+      "Bash(minikube start:*)",
+      "Bash(kubectl apply:*)",
+      "Bash(helm repo:*)",
+      "Bash(helm upgrade:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(kubectl get:*)",
+      "Bash(pgrep:*)",
+      "Bash(kill 1802:*)",
+      "Bash(python3:*)",
+      "WebFetch(domain:shop.resmed.com.au)",
+      "Bash(gh auth:*)",
+      "Bash(go version:*)",
+      "Bash(docker:*)",
+      "Bash(git:*)"
     ]
   }
 }

@@ -1,0 +1,10 @@
+# Compiled binaries
+device-catalog-api/device-catalog-api
+order-service/order-service
+inventory-api/inventory-api
+patient-service/patient-service
+therapy-data-api/therapy-data-api
+notification-service/notification-service
+
+# Test output
+**/coverage.out

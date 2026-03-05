@@ -1,32 +1,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: order-service
+  name: therapy-data-api
   namespace: production
   labels:
-    app: order-service
+    app: therapy-data-api
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: order-service
+      app: therapy-data-api
   template:
     metadata:
       labels:
-        app: order-service
+        app: therapy-data-api
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
       containers:
-        - name: order-service
-          image: ghcr.io/taotao19950405/order-serviceatest
+        - name: therapy-data-api
+          image: ghcr.io/taotao19950405/therapy-data-apiatest
           ports:
             - containerPort: 8080
           env:
             - name: DATABASE_URL
-              value: "postgres://resmed:resmed@postgres.production.svc.cluster.local:5432/order?sslmode=disable"
+              value: "postgres://resmed:resmed@postgres.production.svc.cluster.local:5432/therapy?sslmode=disable"
           readinessProbe:
             httpGet:
               path: /health
@@ -50,13 +50,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: order-service
+  name: therapy-data-api
   namespace: production
   labels:
-    app: order-service
+    app: therapy-data-api
 spec:
   selector:
-    app: order-service
+    app: therapy-data-api
   ports:
     - port: 80
       targetPort: 8080

@@ -1,0 +1,17 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: order-service
+  description: Customer order management with line items
+  annotations:
+    github.com/project-slug: taotao19950405/resmed-platform-dashboard
+  links:
+    - url: http://localhost:8081/health
+      title: Health
+    - url: http://localhost:8081/metrics
+      title: Metrics
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: resmed-platform

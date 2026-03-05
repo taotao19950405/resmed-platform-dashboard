@@ -1,0 +1,46 @@
+version: 2
+
+updates:
+  # Go modules — one entry per service
+  - package-ecosystem: gomod
+    directory: /services/device-catalog-api
+    schedule:
+      interval: weekly
+    labels: [dependencies, go]
+
+  - package-ecosystem: gomod
+    directory: /services/order-service
+    schedule:
+      interval: weekly
+    labels: [dependencies, go]
+
+  - package-ecosystem: gomod
+    directory: /services/inventory-api
+    schedule:
+      interval: weekly
+    labels: [dependencies, go]
+
+  - package-ecosystem: gomod
+    directory: /services/patient-service
+    schedule:
+      interval: weekly
+    labels: [dependencies, go]
+
+  - package-ecosystem: gomod
+    directory: /services/therapy-data-api
+    schedule:
+      interval: weekly
+    labels: [dependencies, go]
+
+  - package-ecosystem: gomod
+    directory: /services/notification-service
+    schedule:
+      interval: weekly
+    labels: [dependencies, go]
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies, github-actions]

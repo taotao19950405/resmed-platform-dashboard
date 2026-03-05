@@ -1,32 +1,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: order-service
+  name: patient-service
   namespace: production
   labels:
-    app: order-service
+    app: patient-service
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: order-service
+      app: patient-service
   template:
     metadata:
       labels:
-        app: order-service
+        app: patient-service
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
       containers:
-        - name: order-service
-          image: ghcr.io/taotao19950405/order-serviceatest
+        - name: patient-service
+          image: ghcr.io/taotao19950405/patient-serviceatest
           ports:
             - containerPort: 8080
           env:
             - name: DATABASE_URL
-              value: "postgres://resmed:resmed@postgres.production.svc.cluster.local:5432/order?sslmode=disable"
+              value: "postgres://resmed:resmed@postgres.production.svc.cluster.local:5432/patient?sslmode=disable"
           readinessProbe:
             httpGet:
               path: /health
@@ -50,13 +50,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: order-service
+  name: patient-service
   namespace: production
   labels:
-    app: order-service
+    app: patient-service
 spec:
   selector:
-    app: order-service
+    app: patient-service
   ports:
     - port: 80
       targetPort: 8080

@@ -1,0 +1,17 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: inventory-api
+  description: Warehouse stock levels for all ResMed SKUs
+  annotations:
+    github.com/project-slug: taotao19950405/resmed-platform-dashboard
+  links:
+    - url: http://localhost:8082/health
+      title: Health
+    - url: http://localhost:8082/metrics
+      title: Metrics
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: resmed-platform

@@ -1,0 +1,202 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  # ── Quality gate: test + coverage ──────────────────────────────────────────
+  test:
+    name: Test (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - device-catalog-api
+          - order-service
+          - inventory-api
+          - patient-service
+          - therapy-data-api
+          - notification-service
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: resmed
+          POSTGRES_PASSWORD: resmed
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: services/${{ matrix.service }}/go.sum
+
+      - name: Run tests with coverage
+        working-directory: services/${{ matrix.service }}
+        env:
+          DATABASE_URL: postgres://resmed:resmed@localhost:5432/testdb?sslmode=disable
+        run: |
+          go test ./... -coverprofile=coverage.out -covermode=atomic
+          go tool cover -func=coverage.out
+
+      - name: Enforce 70% coverage minimum
+        working-directory: services/${{ matrix.service }}
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep "^total:" | awk '{print $3}' | tr -d '%')
+          echo "Coverage: ${COVERAGE}%"
+          if (( $(echo "$COVERAGE < 70" | bc -l) )); then
+            echo "❌ Coverage ${COVERAGE}% is below 70% minimum"
+            exit 1
+          fi
+          echo "✅ Coverage ${COVERAGE}% meets minimum"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.service }}
+          path: services/${{ matrix.service }}/coverage.out
+
+  # ── Quality gate: lint ─────────────────────────────────────────────────────
+  lint:
+    name: Lint (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - device-catalog-api
+          - order-service
+          - inventory-api
+          - patient-service
+          - therapy-data-api
+          - notification-service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64
+          working-directory: services/${{ matrix.service }}
+          args: --config ../../.golangci.yml --timeout=5m
+
+  # ── Quality gate: docker build ─────────────────────────────────────────────
+  build:
+    name: Build Docker image (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - device-catalog-api
+          - order-service
+          - inventory-api
+          - patient-service
+          - therapy-data-api
+          - notification-service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/${{ matrix.service }}
+          push: false
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Quality gate: security scan ────────────────────────────────────────────
+  scan:
+    name: Security scan (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - device-catalog-api
+          - order-service
+          - inventory-api
+          - patient-service
+          - therapy-data-api
+          - notification-service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: services/${{ matrix.service }}
+          push: false
+          load: true
+          tags: scan-target:${{ matrix.service }}
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: scan-target:${{ matrix.service }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+
+  # ── Quality gate: k8s manifest validation ─────────────────────────────────
+  validate-k8s:
+    name: Validate Kubernetes manifests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Validate manifests
+        run: |
+          find k8s -name "*.yaml" \
+            ! -name "servicemonitor.yaml" \
+            ! -name "prometheus-servicemonitor.yaml" \
+            | xargs kubeconform -strict -summary
+
+  # ── Gate summary ──────────────────────────────────────────────────────────
+  ci-passed:
+    name: All CI gates passed
+    runs-on: ubuntu-latest
+    needs: [test, lint, build, scan, validate-k8s]
+    if: always()
+    steps:
+      - name: Check all gates
+        run: |
+          if [[ "${{ needs.test.result }}" != "success" ]]; then echo "❌ Tests failed"; exit 1; fi
+          if [[ "${{ needs.lint.result }}" != "success" ]]; then echo "❌ Lint failed"; exit 1; fi
+          if [[ "${{ needs.build.result }}" != "success" ]]; then echo "❌ Build failed"; exit 1; fi
+          if [[ "${{ needs.scan.result }}" != "success" ]]; then echo "❌ Security scan failed"; exit 1; fi
+          if [[ "${{ needs.validate-k8s.result }}" != "success" ]]; then echo "❌ K8s validation failed"; exit 1; fi
+          echo "✅ All CI quality gates passed"

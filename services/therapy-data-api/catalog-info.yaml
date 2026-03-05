@@ -1,0 +1,17 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: therapy-data-api
+  description: CPAP therapy sessions and compliance summaries
+  annotations:
+    github.com/project-slug: taotao19950405/resmed-platform-dashboard
+  links:
+    - url: http://localhost:8084/health
+      title: Health
+    - url: http://localhost:8084/metrics
+      title: Metrics
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: resmed-platform

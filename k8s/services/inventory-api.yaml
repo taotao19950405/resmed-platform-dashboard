@@ -5,7 +5,6 @@ metadata:
   namespace: production
   labels:
     app: inventory-api
-    team: inventory-team
 spec:
   replicas: 2
   selector:
@@ -15,20 +14,38 @@ spec:
     metadata:
       labels:
         app: inventory-api
-        team: inventory-team
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: inventory-api
-          image: nginx:1.25-alpine
+          image: ghcr.io/taotao19950405/inventory-apiatest
           ports:
-            - containerPort: 80
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              value: "postgres://resmed:resmed@postgres.production.svc.cluster.local:5432/inventory?sslmode=disable"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 30
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              memory: "64Mi"
+              cpu: "50m"
             limits:
-              cpu: 200m
-              memory: 128Mi
+              memory: "128Mi"
+              cpu: "200m"
 ---
 apiVersion: v1
 kind: Service
@@ -42,4 +59,4 @@ spec:
     app: inventory-api
   ports:
     - port: 80
-      targetPort: 80
+      targetPort: 8080

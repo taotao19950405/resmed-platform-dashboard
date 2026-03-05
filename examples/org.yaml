@@ -7,11 +7,28 @@ metadata:
 spec:
   memberOf: [guests]
 ---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: taotao19950405
+  annotations:
+    github.com/user-login: taotao19950405
+spec:
+  memberOf: [platform-team]
+---
 # https://backstage.io/docs/features/software-catalog/descriptor-format#kind-group
 apiVersion: backstage.io/v1alpha1
 kind: Group
 metadata:
   name: guests
+spec:
+  type: team
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform-team
 spec:
   type: team
   children: []

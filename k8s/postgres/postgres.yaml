@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: production
+data:
+  init.sql: |
+    CREATE USER resmed WITH PASSWORD 'resmed';
+    CREATE DATABASE device_catalog OWNER resmed;
+    CREATE DATABASE orders OWNER resmed;
+    CREATE DATABASE inventory OWNER resmed;
+    CREATE DATABASE patients OWNER resmed;
+    CREATE DATABASE therapy OWNER resmed;
+    CREATE DATABASE notifications OWNER resmed;
+    GRANT ALL PRIVILEGES ON DATABASE device_catalog TO resmed;
+    GRANT ALL PRIVILEGES ON DATABASE orders TO resmed;
+    GRANT ALL PRIVILEGES ON DATABASE inventory TO resmed;
+    GRANT ALL PRIVILEGES ON DATABASE patients TO resmed;
+    GRANT ALL PRIVILEGES ON DATABASE therapy TO resmed;
+    GRANT ALL PRIVILEGES ON DATABASE notifications TO resmed;
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: production
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "resmed-postgres-pw"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: production
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: "postgres"
+          volumeMounts:
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: postgres-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: production
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

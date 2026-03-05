@@ -64,10 +64,18 @@ techdocs:
     type: 'local' # Alternatives - 'googleGcs' or 'awsS3'. Read documentation for using alternatives.
 
 auth:
-  # see https://backstage.io/docs/auth/ to learn about auth providers
+  environment: development
   providers:
-    # See https://backstage.io/docs/auth/guest/provider
     guest: {}
+    github:
+      development:
+        clientId: ${AUTH_GITHUB_CLIENT_ID}
+        clientSecret: ${AUTH_GITHUB_CLIENT_SECRET}
+        signIn:
+          resolvers:
+            - resolver: usernameMatchingUserEntityName
+            - resolver: emailMatchingUserEntityProfileEmail
+            - resolver: emailLocalPartMatchingUserEntityName
 
 scaffolder:
   # see https://backstage.io/docs/features/software-templates/configuration for software template options
@@ -94,6 +102,20 @@ catalog:
       target: ../../examples/org.yaml
       rules:
         - allow: [User, Group]
+
+    # ResMed microservices
+    - type: file
+      target: ../../services/device-catalog-api/catalog-info.yaml
+    - type: file
+      target: ../../services/order-service/catalog-info.yaml
+    - type: file
+      target: ../../services/inventory-api/catalog-info.yaml
+    - type: file
+      target: ../../services/patient-service/catalog-info.yaml
+    - type: file
+      target: ../../services/therapy-data-api/catalog-info.yaml
+    - type: file
+      target: ../../services/notification-service/catalog-info.yaml
 
     ## Uncomment these lines to add more example data
     # - type: url

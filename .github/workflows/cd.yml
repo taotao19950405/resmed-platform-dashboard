@@ -12,10 +12,43 @@ env:
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
 
 jobs:
-  # ── Build and push all service images ─────────────────────────────────────
+  # ── Detect which services actually changed ─────────────────────────────────
+  changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      device-catalog-api:    ${{ steps.filter.outputs.device-catalog-api }}
+      order-service:         ${{ steps.filter.outputs.order-service }}
+      inventory-api:         ${{ steps.filter.outputs.inventory-api }}
+      patient-service:       ${{ steps.filter.outputs.patient-service }}
+      therapy-data-api:      ${{ steps.filter.outputs.therapy-data-api }}
+      notification-service:  ${{ steps.filter.outputs.notification-service }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            device-catalog-api:
+              - 'services/device-catalog-api/**'
+            order-service:
+              - 'services/order-service/**'
+            inventory-api:
+              - 'services/inventory-api/**'
+            patient-service:
+              - 'services/patient-service/**'
+            therapy-data-api:
+              - 'services/therapy-data-api/**'
+            notification-service:
+              - 'services/notification-service/**'
+
+  # ── Build and push only changed service images ────────────────────────────
   push-images:
     name: Push ${{ matrix.service }}
     runs-on: ubuntu-latest
+    needs: changes
     permissions:
       contents: read
       packages: write
@@ -23,13 +56,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - device-catalog-api
-          - order-service
-          - inventory-api
-          - patient-service
-          - therapy-data-api
-          - notification-service
+        include:
+          - service: device-catalog-api
+            changed: ${{ needs.changes.outputs.device-catalog-api }}
+          - service: order-service
+            changed: ${{ needs.changes.outputs.order-service }}
+          - service: inventory-api
+            changed: ${{ needs.changes.outputs.inventory-api }}
+          - service: patient-service
+            changed: ${{ needs.changes.outputs.patient-service }}
+          - service: therapy-data-api
+            changed: ${{ needs.changes.outputs.therapy-data-api }}
+          - service: notification-service
+            changed: ${{ needs.changes.outputs.notification-service }}
+
+    if: ${{ matrix.changed == 'true' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +108,8 @@ jobs:
   update-manifests:
     name: Update image tags in manifests
     runs-on: ubuntu-latest
-    needs: push-images
+    needs: [changes, push-images]
+    if: always() && needs.push-images.result != 'failure'
     permissions:
       contents: write
 
@@ -76,15 +118,23 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update image tags
+      - name: Update image tags for changed services
         run: |
           SHA_TAG="sha-$(echo ${{ github.sha }} | cut -c1-7)"
+          UPDATED=0
           for svc in device-catalog-api order-service inventory-api patient-service therapy-data-api notification-service; do
-            sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${svc}:.*|image: ghcr.io/${{ github.repository_owner }}/${svc}:${SHA_TAG}|" k8s/services/${svc}.yaml
-            echo "Updated ${svc} to ${SHA_TAG}"
+            CHANGED=$(echo '${{ toJSON(needs.changes.outputs) }}' | jq -r --arg s "$svc" '.[$s]')
+            if [ "$CHANGED" = "true" ]; then
+              sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${svc}:.*|image: ghcr.io/${{ github.repository_owner }}/${svc}:${SHA_TAG}|" k8s/services/${svc}.yaml
+              echo "Updated ${svc} to ${SHA_TAG}"
+              UPDATED=1
+            fi
           done
+          echo "updated=$UPDATED" >> $GITHUB_OUTPUT
+        id: update
 
       - name: Commit updated manifests
+        if: steps.update.outputs.updated == '1'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -92,7 +142,7 @@ jobs:
           git diff --staged --quiet || git commit -m "chore: update image tags to ${{ github.sha }}"
           git push
 
-  # ── Deploy to Kubernetes (self-hosted runner required for minikube) ─────────
+  # ── Deploy to Kubernetes (self-hosted runner required) ─────────────────────
   deploy:
     name: Deploy to production
     runs-on: self-hosted
